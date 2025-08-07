@@ -8,7 +8,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
-import typer
+import typer  # 用于构建CLI的工具
 
 from graphrag.config.defaults import graphrag_config_defaults
 from graphrag.config.enums import IndexingMethod, SearchMethod
@@ -21,7 +21,7 @@ INVALID_METHOD_ERROR = "Invalid method"
 app = typer.Typer(
     help="GraphRAG: A graph-based retrieval-augmented generation (RAG) system.",
     no_args_is_help=True,
-)
+)  # 创建Typer应用实例
 
 
 # A workaround for typer's lack of support for proper autocompletion of file/directory paths
