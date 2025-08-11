@@ -14,26 +14,27 @@ COMMAND_TO_RUN = "index"
 
 # --- 通用参数 (对应 CLI 的 --root, --config 等) ---
 # PROJECT_ROOT 对应 CLI 的 --root (-r)
-PROJECT_ROOT = Path("/root/autodl-tmp/graphrag/graphrag")
+PROJECT_ROOT = Path("/root/autodl-tmp/graphrag/ragtest")
 # CONFIG_PATH 对应 CLI 的 --config (-c)
-CONFIG_PATH = Path("/root/autodl-tmp/graphrag/graphrag/settings.yaml") # 如果文件不存在，CLI 会传 None
+CONFIG_PATH = Path("/root/autodl-tmp/graphrag/ragtest/settings.yaml") # 如果文件不存在，CLI 会传 None
 
 # --- Index / Update 命令参数 ---
-INDEX_METHOD = IndexingMethod(graphrag_config_defaults.indexing.method) # 使用默认值 "standard"
+INDEX_METHOD = IndexingMethod("standard") # 使用默认值 "standard"
 INDEX_VERBOSE = False # 对应 --verbose (-v)
 INDEX_MEMPROFILE = False # 对应 --memprofile
-INDEX_LOGGER = LoggerType(graphrag_config_defaults.logging.logger) # 使用默认值 "rich"
+INDEX_LOGGER = LoggerType("rich") # 使用默认值 "rich"
 INDEX_DRY_RUN = False # 对应 --dry-run
 INDEX_CACHE = graphrag_config_defaults.cache # 使用默认值 True
 INDEX_SKIP_VALIDATION = False # 对应 --skip-validation
 # INDEX_OUTPUT_DIR 对应 CLI 的 --output (-o)
-INDEX_OUTPUT_DIR = Path("./my_index_output") # 可以设置为 None 以使用配置文件中的值
+# INDEX_OUTPUT_DIR = Path("./my_index_output") # 可以设置为 None 以使用配置文件中的值
+INDEX_OUTPUT_DIR = None 
 
 # --- Prompt-Tune 命令参数 ---
 PROMPT_TUNE_VERBOSE = False # 对应 --verbose (-v)
-PROMPT_TUNE_LOGGER = LoggerType(graphrag_config_defaults.logging.logger) # 使用默认值 "rich"
+PROMPT_TUNE_LOGGER = LoggerType("rich") # 使用默认值 "rich"
 PROMPT_TUNE_DOMAIN = None # 对应 --domain (如果为 None，会从数据推断)
-PROMPT_TUNE_SELECTION_METHOD = DocSelectionType(graphrag_config_defaults.prompt_tuning.selection_method) # 使用默认值 "random"
+PROMPT_TUNE_SELECTION_METHOD = DocSelectionType.RANDOM  # 使用默认值 "random"
 PROMPT_TUNE_N_SUBSET_MAX = N_SUBSET_MAX # 对应 --n-subset-max, 默认 300
 PROMPT_TUNE_K = K # 对应 --k, 默认 15
 PROMPT_TUNE_LIMIT = LIMIT # 对应 --limit, 默认 15

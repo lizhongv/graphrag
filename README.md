@@ -78,7 +78,7 @@ graphrag index --root ./ragtest  --verbose
 
 # 3. 进行查询 query
 # graphrag query --help 
-graphrag query --root ./ragtest --method global "贾元春和贾宝玉的关系？"
+graphrag query --root ./ragtest --method global -q "萧炎的父亲是谁？"
 graphrag query --root ./ragtest --method global -q "贾元春和贾宝玉的关系？"
 
 run poe query --root ./ragtest --method global "..."
@@ -91,5 +91,49 @@ python -m graphrag.query --root ./hlmtest --method global "贾元春和贾宝玉
 graphrag
   |--cli 
       |
-      ---main.py    # 定义了一个命令行界面(CLI)工具，用于操作 GraphRAG
+      ---main.py    # 定义了一个命令行界面(CLI)工具，用于操作 GraphRAG，包括init，index，query, update等命令
+      | 
+      ----initialize.py  # 主要为init命令的函数，创建root目录以及settings.yaml文件、.env 文件等 prompts目录等
+      |
+      ----index.py  # 主要为index命令的函数，并通过api.build_index 中来运行pipeline，
+      |
+      ----prompt_tune.py # 主要用于prompt的修改
+  | 
+  ---api
+        |
+        ---index.py  # 构建索引的pipeline以及run pipeline，得到输出结果
+  |
+  ---index 
+       |
+       ----run
+             |  
+             ----run_pipeline.py  # 根据config运行pipeline整个流程  
+  ----config
+      
+
+graphrag/
+├── cli/ # Command Line Interface tools
+│ ├── main.py # Main CLI entry point (init, index, query, update commands)
+│ ├── initialize.py # init command - creates root dir, settings.yaml, .env, prompts
+│ ├── index.py # index command - builds index via api.build_index
+│ └── prompt_tune.py # Prompt modification utilities
+│
+├── api/
+│ └── index.py # Index building pipeline and execution
+│
+├── index/
+│ └── run/
+  ├── workflows 
+      ├── run_workflow   # 
+  
+│ └── run_pipeline.py # Runs entire pipeline based on config
+│
+│
+├── config/ # Configuration files
+│ ├── load_config.py  # 
+│
+│
+└── config/ # Configuration files
+
+rm -rf   ~/.vscode-server     
 ```
