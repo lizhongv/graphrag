@@ -192,11 +192,46 @@ graphrag/
 └── run_pipeline.py         # Entry script to execute the full indexing pipeline based on configuration
 
 # rm -rf   ~/.vscode-server     
+
+### main command 
+graphrag/cli/index.index_cli
+
+### build index
+graphrag/api/index/api.build_index
+
+### create pipeline  method(standard, fast)
+graphrag/index/workflows/factory/PipelineFactory.create_pipeline
+
+### workflows
+graphrag/index/run/run_pipeline.run_pipeline
+graphrag/index/run/utils.create_run_context
+graphrag/index/typing/context.PipelineRunContext
+graphrag/index/run/run_pipeline._run_pipeline
+
+### 1. load_input_documents 
+# result = await workflow_function(config, context)
+graphrag/index/workflows/load_input_documents.run_workflow
+# return PipelineRunResult
+
+### 2. create_base_text_units 
+graphrag/index/workflows/create_base_text_units.run_workflow
+# 注意：默认是英文切分方法，按照tokens来进行切分 
+
+# 3. create_final_documents 
+
+
+## 4. extract_graph 
+graphrag/index/workflows/extract_graph.run_workflow
+graphrag/index/workflows/extract_graph.extract_graph
+# extracted_entities, extracted_relationships 
+graphrag/index/operations/extract_graph/extract_graph.extract_graph 
+
 ```
 
 
 ```bash 
 # standard 
+"load_input_documets",
 "create_base_text_units",
 "create_final_documents",
 "extract_graph",
