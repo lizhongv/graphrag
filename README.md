@@ -217,6 +217,4 @@ graphrag/
 "create_final_text_units",
 "create_community_reports_text",
 "generate_text_embeddings",
-
-
 ```
