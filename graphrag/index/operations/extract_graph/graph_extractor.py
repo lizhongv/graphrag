@@ -21,7 +21,7 @@ from graphrag.prompts.index.extract_graph import (
     GRAPH_EXTRACTION_PROMPT,
     LOOP_PROMPT,
 )
-
+# TODO 
 DEFAULT_TUPLE_DELIMITER = "<|>"
 DEFAULT_RECORD_DELIMITER = "##"
 DEFAULT_COMPLETION_DELIMITER = "<|COMPLETE|>"

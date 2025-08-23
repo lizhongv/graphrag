@@ -10,6 +10,8 @@
 5. 将匹配结果作为prompt上下文进行回答
 
 
+设置num_threads == 4 
+
 ## 直接安装
 ```bash
 conda create -n graphrag python=3.10
@@ -192,43 +194,9 @@ graphrag/
 └── run_pipeline.py         # Entry script to execute the full indexing pipeline based on configuration
 
 # rm -rf   ~/.vscode-server     
-
-### main command 
-graphrag/cli/index.index_cli
-
-### build index
-graphrag/api/index/api.build_index
-
-### create pipeline  method(standard, fast)
-graphrag/index/workflows/factory/PipelineFactory.create_pipeline
-
-### workflows
-graphrag/index/run/run_pipeline.run_pipeline
-graphrag/index/run/utils.create_run_context
-graphrag/index/typing/context.PipelineRunContext
-graphrag/index/run/run_pipeline._run_pipeline
-
-### 1. load_input_documents 
-# result = await workflow_function(config, context)
-graphrag/index/workflows/load_input_documents.run_workflow
-# return PipelineRunResult
-
-### 2. create_base_text_units 
-graphrag/index/workflows/create_base_text_units.run_workflow
-# 注意：默认是英文切分方法，按照tokens来进行切分 
-
-# 3. create_final_documents 
-
-
-## 4. extract_graph 
-graphrag/index/workflows/extract_graph.run_workflow
-graphrag/index/workflows/extract_graph.extract_graph
-# extracted_entities, extracted_relationships 
-graphrag/index/operations/extract_graph/extract_graph.extract_graph 
-
 ```
 
-
+## index 流程
 ```bash 
 # standard 
 "load_input_documets",
@@ -252,4 +220,49 @@ graphrag/index/operations/extract_graph/extract_graph.extract_graph
 "create_final_text_units",
 "create_community_reports_text",
 "generate_text_embeddings",
+
+
+### 1. main command 
+graphrag/cli/index.index_cli
+
+### 2. build index
+graphrag/api/index/api.build_index
+
+### 3. run pipeline 
+graphrag/index/run/run_pipeline.run_pipeline 
+
+### 4. workflows  
+# graphrag/index/run/utils.create_run_context
+# graphrag/index/typing/context.PipelineRunContext
+graphrag/index/run/run_pipeline._run_pipeline
+
+### （1） load_input_documents 
+# result = await workflow_function(config, context)
+graphrag/index/workflows/load_input_documents.run_workflow
+# return PipelineRunResult
+
+### （2） create_base_text_units 
+graphrag/index/workflows/create_base_text_units.run_workflow
+graphrag/index/workflows/create_base_text_units.create_base_text_units
+# 注意：默认是英文切分方法，按照tokens来进行切分 
+# graphrag/index/operations/chunk_text/chunk_text.chunk_text
+
+###  (3)  create_final_documents 
+graphrag/index/workflows/create_final_documents.run_workflow 
+graphrag/index/workflows/create_final_documents.create_final_documents 
+
+
+### （4） extract_graph 
+graphrag/index/workflows/extract_graph.run_workflow
+# graphrag/index/workflows/extract_graph.extract_graph
+# extracted_entities, extracted_relationships 
+graphrag/index/operations/extract_graph/extract_graph.extract_graph 
+# extractor 
+# graphrag/index/utils/derive_from_rows.derive_from_rows 
+# graphrag/index/operations/extract_graph/graph_inelligence_strategy.run_extract_graph
+# GraphExtractor 
+# TODO 可以设置DELIMITER等
+# graphrag/index/operations/extract_graph/graph_extractor.GraphExtractor
+#__call__
+
 ```
