@@ -20,8 +20,10 @@ from graphrag.index.utils.derive_from_rows import derive_from_rows
 
 log = logging.getLogger(__name__)
 
-
-DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]
+# TODO 修改实体类型
+# DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]
+DEFAULT_ENTITY_TYPES = ["PERSON", "ORGANIZATION", "FLAME", 
+                        "TECHNIQUE", "LOCATION", "EVENT", "CULTIVATION_LEVEL"]
 
 
 async def extract_graph(
@@ -47,7 +49,9 @@ async def extract_graph(
 
     num_started = 0
 
+    # 异步函数
     async def run_strategy(row):
+        """Run the entity extraction strategy on a single row."""
         nonlocal num_started
         text = row[text_column]
         id = row[id_column]
@@ -57,10 +61,11 @@ async def extract_graph(
             callbacks,
             cache,
             strategy_config,
-        )
+        )  # TODO: 异步处理，返回多个（实体、关系图）
         num_started += 1
         return [result.entities, result.relationships, result.graph]
 
+    # 批处理引擎
     results = await derive_from_rows(
         text_units,
         run_strategy,

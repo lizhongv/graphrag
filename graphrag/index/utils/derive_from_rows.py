@@ -40,7 +40,7 @@ async def derive_from_rows(
 ) -> list[ItemType | None]:
     """Apply a generic transform function to each row. Any errors will be reported and thrown."""
     callbacks = callbacks or NoopWorkflowCallbacks()
-    match async_type:
+    match async_type:  # match-case 语法
         case AsyncType.AsyncIO:
             return await derive_from_rows_asyncio(
                 input, transform, callbacks, num_threads
@@ -68,9 +68,10 @@ async def derive_from_rows_asyncio_threads(
 
     This is useful for IO bound operations.
     """
-    semaphore = asyncio.Semaphore(num_threads or 4)
+    semaphore = asyncio.Semaphore(num_threads or 4)  # 使用信号量限制同时运行的线程数量
 
-    async def gather(execute: ExecuteFn[ItemType]) -> list[ItemType | None]:
+    async def gather(execute: ExecuteFn[ItemType]) -> list[ItemType | None]:  # 高阶函数，接收一个执行函数作为参数，负责组织和管理所有任务的执行 
+
         tasks = [asyncio.to_thread(execute, row) for row in input.iterrows()]
 
         async def execute_task(task: Coroutine) -> ItemType | None:

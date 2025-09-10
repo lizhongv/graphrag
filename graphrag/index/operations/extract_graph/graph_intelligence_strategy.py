@@ -60,7 +60,7 @@ async def run_extract_graph(
     extractor = GraphExtractor(
         model_invoker=model,
         prompt=extraction_prompt,
-        max_gleanings=max_gleanings,
+        max_gleanings=max_gleanings,  # 补充抽取次数
         on_error=lambda e, s, d: (
             callbacks.error("Entity Extraction Error", e, s, d) if callbacks else None
         ),
@@ -70,7 +70,7 @@ async def run_extract_graph(
     results = await extractor(
         list(text_list),
         {
-            "entity_types": entity_types,
+            "entity_types": entity_types,   
             "tuple_delimiter": tuple_delimiter,
             "record_delimiter": record_delimiter,
             "completion_delimiter": completion_delimiter,

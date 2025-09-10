@@ -79,7 +79,9 @@ def index_cli(
         cli_overrides["output.base_dir"] = str(output_dir)
         cli_overrides["reporting.base_dir"] = str(output_dir)
         cli_overrides["update_index_output.base_dir"] = str(output_dir)
+    
     config = load_config(root_dir, config_filepath, cli_overrides)
+    
     _run_index(
         config=config,
         method=method,

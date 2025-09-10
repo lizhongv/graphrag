@@ -14,9 +14,9 @@ COMMAND_TO_RUN = "index"
 
 # --- 通用参数 (对应 CLI 的 --root, --config 等) ---
 # PROJECT_ROOT 对应 CLI 的 --root (-r)
-PROJECT_ROOT = Path("/root/autodl-tmp/graphrag/ragtest")
+PROJECT_ROOT = Path(r"C:\Users\lizhong\Documents\codes\graphrag\ragtest")
 # CONFIG_PATH 对应 CLI 的 --config (-c)
-CONFIG_PATH = Path("/root/autodl-tmp/graphrag/ragtest/settings.yaml") # 如果文件不存在，CLI 会传 None
+CONFIG_PATH = Path(r"C:\Users\lizhong\Documents\codes\graphrag\ragtest\settings.yaml") # 如果文件不存在，CLI 会传 None
 
 # --- Index / Update 命令参数 ---
 INDEX_METHOD = IndexingMethod("standard") # 使用默认值 "standard"

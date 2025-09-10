@@ -86,8 +86,8 @@ async def run_pipeline(
         config=config,
         logger=logger,
         context=context,
-    ):
-        yield table
+    ):  # 异步迭代
+        yield table  # 生成器函数
 
 
 async def _run_pipeline(

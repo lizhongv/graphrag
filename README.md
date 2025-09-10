@@ -195,9 +195,16 @@ graphrag/
 
 # rm -rf   ~/.vscode-server     
 ```
+## 模型调用过程
+
+```python
+register_chat -> create_chat_model -> create_openai_chat_llm -> OpenAITextChatLLMImpl
+```
+
 
 ## index 流程
-```bash 
+
+```python
 # standard 
 "load_input_documets",
 "create_base_text_units",
@@ -223,46 +230,262 @@ graphrag/
 
 
 ### 1. main command 
-graphrag/cli/index.index_cli
+# graphrag/cli/index.index_cli
+outputs = asyncio.run(
+    api.build_index(
+        config=config,
+        method=method,
+        is_update_run=is_update_run,
+        memory_profile=memprofile,
+        progress_logger=progress_logger,
+    )
+)
 
 ### 2. build index
-graphrag/api/index/api.build_index
+# graphrag/api/index/api.build_index
+pipeline = PipelineFactory.create_pipeline(config, method)
+workflow_callbacks.pipeline_start(pipeline.names())
+async for output in run_pipeline(
+    pipeline,
+    config,
+    callbacks=workflow_callbacks,
+    logger=logger,
+    is_update_run=is_update_run,
+)
+workflow_callbacks.pipeline_end(outputs)
 
 ### 3. run pipeline 
-graphrag/index/run/run_pipeline.run_pipeline 
-
-### 4. workflows  
-# graphrag/index/run/utils.create_run_context
-# graphrag/index/typing/context.PipelineRunContext
+# graphrag/index/run/run_pipeline.run_pipeline 
 graphrag/index/run/run_pipeline._run_pipeline
+async for table in _run_pipeline(
+    pipeline=pipeline,
+    config=config,
+    logger=logger,
+    context=context,
+):  # 异步迭代
+    yield table  # 生成器函数
+
+### 4. run workflow 
+# graphrag/index/run/run_pipeline._run_pipeline  
+for name, workflow_function in pipeline.run():
+    ...
+    result = await workflow_function(config, context)
+    ...
+    yield PipelineRunResult(
+        workflow=name, result=result.result, state=context.state, errors=None
+    )
 
 ### （1） load_input_documents 
-# result = await workflow_function(config, context)
-graphrag/index/workflows/load_input_documents.run_workflow
-# return PipelineRunResult
+# graphrag/index/workflows/load_input_documents
+output = await load_input_documents(
+    config.input,
+    context.input_storage,
+    context.progress_logger,
+)
 
 ### （2） create_base_text_units 
-graphrag/index/workflows/create_base_text_units.run_workflow
-graphrag/index/workflows/create_base_text_units.create_base_text_units
-# 注意：默认是英文切分方法，按照tokens来进行切分 
-# graphrag/index/operations/chunk_text/chunk_text.chunk_text
+# graphrag/index/workflows/create_base_text_units
+output = create_base_text_units(
+    documents,
+    context.callbacks,
+    chunks.group_by_columns,
+    chunks.size,
+    chunks.overlap,
+    chunks.encoding_model,
+    strategy=chunks.strategy,
+    prepend_metadata=chunks.prepend_metadata,
+    chunk_size_includes_metadata=chunks.chunk_size_includes_metadata,
+)
 
 ###  (3)  create_final_documents 
-graphrag/index/workflows/create_final_documents.run_workflow 
-graphrag/index/workflows/create_final_documents.create_final_documents 
+# graphrag/index/workflows/create_final_documents
+output = create_final_documents(documents, text_units)
 
 
 ### （4） extract_graph 
-graphrag/index/workflows/extract_graph.run_workflow
-# graphrag/index/workflows/extract_graph.extract_graph
-# extracted_entities, extracted_relationships 
-graphrag/index/operations/extract_graph/extract_graph.extract_graph 
-# extractor 
-# graphrag/index/utils/derive_from_rows.derive_from_rows 
-# graphrag/index/operations/extract_graph/graph_inelligence_strategy.run_extract_graph
-# GraphExtractor 
-# TODO 可以设置DELIMITER等
-# graphrag/index/operations/extract_graph/graph_extractor.GraphExtractor
-#__call__
+# graphrag/index/workflows/extract_graph
+entities, relationships, raw_entities, raw_relationships = await extract_graph(
+    text_units=text_units,
+    callbacks=context.callbacks,
+    cache=context.cache,
+    extraction_strategy=extraction_strategy,
+    extraction_num_threads=extract_graph_llm_settings.concurrent_requests,
+    extraction_async_mode=extract_graph_llm_settings.async_mode,
+    entity_types=config.extract_graph.entity_types,
+    summarization_strategy=summarization_strategy,
+    summarization_num_threads=summarization_llm_settings.concurrent_requests,
+)
+...
+extracted_entities, extracted_relationships = await extractor(
+    text_units=text_units,
+    callbacks=callbacks,
+    cache=cache,
+    text_column="text",
+    id_column="id",
+    strategy=extraction_strategy,
+    async_mode=extraction_async_mode,
+    entity_types=entity_types,
+    num_threads=extraction_num_threads,
+)
+...
+# graphrag/index/operations/extract_graph/extract_graph
+async def extract_graph -> tuple[pd.DataFrame, pd.DataFrame]:
+    ...
+    # run_graph_intelligence -> run_extract_graph
+    strategy_exec = _load_strategy(
+        strategy.get("type", ExtractEntityStrategyType.graph_intelligence)
+    )
+
+    async def run_strategy(row):
+        nonlocal num_started
+        text = row[text_column]
+        id = row[id_column]
+        result = await strategy_exec(
+            [Document(text=text, id=id)],
+            entity_types,
+            callbacks,
+            cache,
+            strategy_config,
+        )
+        num_started += 1
+        return [result.entities, result.relationships, result.graph]
+
+    results = await derive_from_rows(
+          text_units,
+          run_strategy,
+          callbacks,
+          async_type=async_mode,
+          num_threads=num_threads,
+      )
+    ...
+    return (entities, relationships)
+  
+# graphrag/index/operations/extract_graph/graph_intelligence_strategy.py
+async def run_extract_graph -> EntityExtractionResult:
+    ...
+    # GraphExtractor
+    results = await extractor(
+        list(text_list),
+        {
+            "entity_types": entity_types,   
+            "tuple_delimiter": tuple_delimiter,
+            "record_delimiter": record_delimiter,
+            "completion_delimiter": completion_delimiter,
+        },
+    )
+   ...
+   return EntityExtractionResult(entities, relationship, graph)
+
+# graphrag/index/operations/extract_graph/graph_extractor 
+class GraphExtractor:
+  ...
+  def __call__ -> GraphExtractionResult:
+    ...
+    result = await self._process_document(text, prompt_variables)
+    ...
+  
+  async def _process_document:
+    ...
+    response = await self._model.achat(
+          self._extraction_prompt.format(**{
+              **prompt_variables,
+              self._input_text_key: text,
+          }),
+      )
+    ...
+    for i in range(self._max_gleanings):
+      response = await self._model.achat(
+          CONTINUE_PROMPT,
+          name=f"extract-continuation-{i}",
+          history=response.history,
+      )
+      results += response.output.content or ""
+
+
+    async def _process_results -> nx.Graph
+        graph = nx.Graph() 
+
+
+###  summarize descriptions
+
+# graphrag/index/operations/summarize_descriptions/summarize_descriptions
+async with semaphore:
+    results = await strategy_exec(
+        id, descriptions, callbacks, cache, strategy_config
+    )
+    ticker(1)
+
+# finalize graph
+# graphrag/index/workflows/finalize_graph
+final_entities, final_relationships = finalize_graph(
+    entities,
+    relationships,
+    callbacks=context.callbacks,
+    embed_config=config.embed_graph,
+    layout_enabled=config.umap.enabled,
+)
 
 ```
+
+实体关系补充抽取流程
+```python
+async def _process_document(
+    self, text: str, prompt_variables: dict[str, str]
+) -> str:
+    response = await self._model.achat(
+        self._extraction_prompt.format(**{
+            **prompt_variables,
+            self._input_text_key: text,
+        }),
+    )
+    results = response.output.content or ""
+
+    # if gleanings are specified, enter a loop to extract more entities
+    # there are two exit criteria: (a) we hit the configured max, (b) the model says there are no more entities
+    if self._max_gleanings > 0:  # 补充抽取次数
+        for i in range(self._max_gleanings):
+            response = await self._model.achat(
+                CONTINUE_PROMPT,
+                name=f"extract-continuation-{i}",
+                history=response.history,
+            )
+            results += response.output.content or ""
+
+            # if this is the final glean, don't bother updating the continuation flag
+            if i >= self._max_gleanings - 1:
+                break
+
+            response = await self._model.achat(
+                LOOP_PROMPT,
+                name=f"extract-loopcheck-{i}",
+                history=response.history,
+            )
+            if response.output.content != "Y":
+                break
+
+    return results
+```
+这段代码是 GraphExtractor 类中的一个异步方法 _process_document，用于处理单个文档文本，向大语言模型（LLM）发送抽取实体和关系的请求，并根据配置多次补充抽取（gleanings）。
+
+具体流程如下：
+
+首先，使用 self._extraction_prompt 和 prompt_variables 以及当前 text 组装提示词，调用模型的 achat 方法，得到初步抽取结果。
+如果配置了 max_gleanings（补充抽取次数），则进入循环，每次用 CONTINUE_PROMPT 让模型继续抽取更多实体/关系，并将新结果追加到 results。
+每次补充抽取后，如果不是最后一次，还会用 LOOP_PROMPT 询问模型是否还有更多实体可抽取。如果模型回复不是 "Y"，则提前退出循环。
+最终返回所有抽取结果字符串。
+简而言之，这段代码实现了“多轮补充抽取”，直到达到最大次数或模型认为没有更多实体可抽取为止。
+ 
+
+
+
+```bash
+# 打包
+tar -zcvf ragtest.tar.gz ragtest 
+
+# 解压
+tar -zxvf ragtest.tar.gz
+```
+
+## bug 注意
+
+当运行相同数据时，由于没有清楚缓存cache，很可能导致llm回复不带history，后续需要详细分析代码。

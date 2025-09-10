@@ -16,16 +16,25 @@ from graphrag.config.defaults import graphrag_config_defaults
 from graphrag.index.typing.error_handler import ErrorHandlerFn
 from graphrag.index.utils.string import clean_str
 from graphrag.language_model.protocol.base import ChatModel
-from graphrag.prompts.index.extract_graph import (
+
+from graphrag.prompts.index.extract_graph_zh import (
     CONTINUE_PROMPT,
     GRAPH_EXTRACTION_PROMPT,
-    LOOP_PROMPT,
+    LOOP_PROMPT
 )
-# TODO 
-DEFAULT_TUPLE_DELIMITER = "<|>"
-DEFAULT_RECORD_DELIMITER = "##"
-DEFAULT_COMPLETION_DELIMITER = "<|COMPLETE|>"
-DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]
+# from graphrag.prompts.index.extract_graph import (
+#     CONTINUE_PROMPT,
+#     GRAPH_EXTRACTION_PROMPT,
+#     LOOP_PROMPT,
+# )
+
+# TODO 修改 
+DEFAULT_TUPLE_DELIMITER = "<|>"  # 元组内部分割符
+DEFAULT_RECORD_DELIMITER = "##"  # 不同记录之间分隔符
+DEFAULT_COMPLETION_DELIMITER = "<|COMPLETE|>"  # 输出完成的特殊标记 
+# DEFAULT_ENTITY_TYPES = ["organization", "person", "geo", "event"]  # 预定义的实体类型列表
+DEFAULT_ENTITY_TYPES = ["PERSON", "ORGANIZATION", "FLAME", "TECHNIQUE", "LOCATION", "EVENT", "CULTIVATION_LEVEL"]
+
 
 log = logging.getLogger(__name__)
 
@@ -143,6 +152,7 @@ class GraphExtractor:
     async def _process_document(
         self, text: str, prompt_variables: dict[str, str]
     ) -> str:
+        # TODO why response.history is null [] ???
         response = await self._model.achat(
             self._extraction_prompt.format(**{
                 **prompt_variables,
@@ -153,12 +163,12 @@ class GraphExtractor:
 
         # if gleanings are specified, enter a loop to extract more entities
         # there are two exit criteria: (a) we hit the configured max, (b) the model says there are no more entities
-        if self._max_gleanings > 0:
+        if self._max_gleanings > 0:  # 补充抽取次数
             for i in range(self._max_gleanings):
                 response = await self._model.achat(
                     CONTINUE_PROMPT,
                     name=f"extract-continuation-{i}",
-                    history=response.history,
+                    history=response.history,  # TODO 这个历史为何会丢失，为空列表
                 )
                 results += response.output.content or ""
 
@@ -194,7 +204,7 @@ class GraphExtractor:
         graph = nx.Graph()
         for source_doc_id, extracted_data in results.items():
             records = [r.strip() for r in extracted_data.split(record_delimiter)]
-
+            # TODO ? <|COMPLETE|> 没有去掉
             for record in records:
                 record = re.sub(r"^\(|\)$", "", record.strip())
                 record_attributes = record.split(tuple_delimiter)
@@ -226,7 +236,7 @@ class GraphExtractor:
                         node["type"] = (
                             entity_type if entity_type != "" else node["type"]
                         )
-                    else:
+                    else:  # 添加新节点 
                         graph.add_node(
                             entity_name,
                             type=entity_type,
