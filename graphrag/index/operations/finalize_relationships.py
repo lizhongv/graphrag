@@ -38,7 +38,4 @@ def finalize_relationships(
         lambda _x: str(uuid4())
     )
 
-    return final_relationships.loc[
-        :,
-        RELATIONSHIPS_FINAL_COLUMNS,
-    ]
+    return final_relationships.loc[:, RELATIONSHIPS_FINAL_COLUMNS]

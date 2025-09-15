@@ -42,11 +42,7 @@ class JsonPipelineCache(PipelineCache):
         """Set method definition."""
         if value is None:
             return
-        # TODO  加入history
-        data = {"result": value, "history": [
-            {"role": "user", "content": debug_data['input']['messages'][0]['content']},
-            {"role": "assistant", "content": value['choices'][0]['message']['content']}
-        ], **(debug_data or {})}
+        data = {"result": value, **(debug_data or {})}
         await self._storage.set(
             key, json.dumps(data, ensure_ascii=False), encoding=self._encoding
         )

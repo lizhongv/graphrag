@@ -42,7 +42,7 @@ async def run_workflow(
     summarization_strategy = config.summarize_descriptions.resolved_strategy(
         config.root_dir, summarization_llm_settings
     )
-
+    # TODO 提取实体和关系，并进行总结
     entities, relationships, raw_entities, raw_relationships = await extract_graph(
         text_units=text_units,
         callbacks=context.callbacks,

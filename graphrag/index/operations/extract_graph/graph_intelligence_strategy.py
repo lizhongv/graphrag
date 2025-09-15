@@ -97,6 +97,6 @@ async def run_extract_graph(
         if item is not None
     ]
 
-    relationships = nx.to_pandas_edgelist(graph)
+    relationships = nx.to_pandas_edgelist(graph) # 将NetworkX图转换为Pandas DataFrame
 
     return EntityExtractionResult(entities, relationships, graph)

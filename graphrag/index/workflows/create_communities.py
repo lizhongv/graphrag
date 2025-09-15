@@ -145,7 +145,4 @@ def create_communities(
     final_communities["period"] = datetime.now(timezone.utc).date().isoformat()
     final_communities["size"] = final_communities.loc[:, "entity_ids"].apply(len)
 
-    return final_communities.loc[
-        :,
-        COMMUNITIES_FINAL_COLUMNS,
-    ]
+    return final_communities.loc[:, COMMUNITIES_FINAL_COLUMNS]

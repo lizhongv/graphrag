@@ -208,30 +208,6 @@ register_chat -> create_chat_model -> create_openai_chat_llm -> OpenAITextChatLL
 ## index 流程
 
 ```python
-# standard 
-"load_input_documets",
-"create_base_text_units",
-"create_final_documents",
-"extract_graph",
-"finalize_graph",
-"extract_covariates",
-"create_communities",
-"create_final_text_units",
-"create_community_reports",
-"generate_text_embeddings",
-
-# fast 
-"create_base_text_units",
-"create_final_documents",
-"extract_graph_nlp",
-"prune_graph",
-"finalize_graph",
-"create_communities",
-"create_final_text_units",
-"create_community_reports_text",
-"generate_text_embeddings",
-
-
 ### 1. main command 
 # graphrag/cli/index.index_cli
 outputs = asyncio.run(
@@ -284,6 +260,8 @@ output = await load_input_documents(
     context.input_storage,
     context.progress_logger,
 )
+# 加载每个文件，根据文件内容生成对应的hash作为id（gen_sha512_hash），最后将item包装成pd.DataFrame
+# 然后将pd数据写入 documents.parquet
 
 ### （2） create_base_text_units 
 # graphrag/index/workflows/create_base_text_units
@@ -298,14 +276,41 @@ output = create_base_text_units(
     prepend_metadata=chunks.prepend_metadata,
     chunk_size_includes_metadata=chunks.chunk_size_includes_metadata,
 )
-# id，采用gen_sha512_hash对chunk生成id 
+# 加载docuemts.parquet
+# 将文档进行切块
+# 每个切块，根据块内容生成hash作为id（gen_sha512_hash）
+# 然后将pd数据存储为 text_units.parquet
 
 ###  (3)  create_final_documents 
 # graphrag/index/workflows/create_final_documents
 output = create_final_documents(documents, text_units)
+# 加载 text_units.parquet文件
+# 
 
 
 ### （4） extract_graph 
+
+### （5）finalize_graph
+# graphrag/index/workflows/finalize_graph
+final_entities, final_relationships = finalize_graph(
+    entities,
+    relationships,
+    callbacks=context.callbacks,
+    embed_config=config.embed_graph,
+    layout_enabled=config.umap.enabled,
+)
+
+### （6）extract_covariates
+
+##   (7) create_communities 
+
+##  （8）
+```
+
+# Extract Graph
+## workflows
+
+```python
 # graphrag/index/workflows/extract_graph
 entities, relationships, raw_entities, raw_relationships = await extract_graph(
     text_units=text_units,
@@ -318,21 +323,23 @@ entities, relationships, raw_entities, raw_relationships = await extract_graph(
     summarization_strategy=summarization_strategy,
     summarization_num_threads=summarization_llm_settings.concurrent_requests,
 )
-...
 
-extracted_entities, extracted_relationships = await extractor(
-    text_units=text_units,
+# 总结实体和关系
+entity_summaries, relationship_summaries = await summarize_descriptions(
+    entities_df=extracted_entities,
+    relationships_df=extracted_relationships,
     callbacks=callbacks,
     cache=cache,
-    text_column="text",
-    id_column="id",
-    strategy=extraction_strategy,
-    async_mode=extraction_async_mode,
-    entity_types=entity_types,
-    num_threads=extraction_num_threads,
+    strategy=summarization_strategy,
+    num_threads=summarization_num_threads,
 )
-...
+```
 
+## extract_graph
+
+提供批处理引擎，并合并所有的Graph
+
+```python
 # graphrag/index/operations/extract_graph/extract_graph
 async def extract_graph -> tuple[pd.DataFrame, pd.DataFrame]:
     ...
@@ -355,6 +362,7 @@ async def extract_graph -> tuple[pd.DataFrame, pd.DataFrame]:
         num_started += 1
         return [result.entities, result.relationships, result.graph]
 
+    # 批处理引擎
     results = await derive_from_rows(
           text_units,
           run_strategy,
@@ -363,126 +371,116 @@ async def extract_graph -> tuple[pd.DataFrame, pd.DataFrame]:
           num_threads=num_threads,
       )
     ...
-    return (entities, relationships)
-  
-# graphrag/index/operations/extract_graph/graph_intelligence_strategy.py
-async def run_extract_graph -> EntityExtractionResult:
-    ...
-    # GraphExtractor
-    results = await extractor(
-        list(text_list),
-        {
-            "entity_types": entity_types,   
-            "tuple_delimiter": tuple_delimiter,
-            "record_delimiter": record_delimiter,
-            "completion_delimiter": completion_delimiter,
-        },
-    )
-   ...
-   return EntityExtractionResult(entities, relationship, graph)
+    
+    # 合并批量构建的Graph
+    entity_dfs = []
+    relationship_dfs = []
+    for result in results:
+        if result:
+            entity_dfs.append(pd.DataFrame(result[0]))
+            relationship_dfs.append(pd.DataFrame(result[1]))
 
+    entities = _merge_entities(entity_dfs)
+    relationships = _merge_relationships(relationship_dfs)
+
+    return (entities, relationships)
+```
+
+
+## GraphExtractor
+
+用于抽取实体和关系，并构建出Graph。
+
+```python
 # graphrag/index/operations/extract_graph/graph_extractor 
 class GraphExtractor:
-  ...
-  def __call__ -> GraphExtractionResult:
+  ....
+  async def __call__():
+    ....
+    for doc_index, text in enumerate(texts):
+        try:
+            # Invoke the entity extraction
+            result = await self._process_document(text, prompt_variables)
+            source_doc_map[doc_index] = text
+            all_records[doc_index] = result
     ...
-    result = await self._process_document(text, prompt_variables)
-    ...
-  
-  async def _process_document:
-    ...
-    response = await self._model.achat(
-          self._extraction_prompt.format(**{
-              **prompt_variables,
-              self._input_text_key: text,
-          }),
-      )
-    ...
-    for i in range(self._max_gleanings):
-      response = await self._model.achat(
-          CONTINUE_PROMPT,
-          name=f"extract-continuation-{i}",
-          history=response.history,
-      )
-      results += response.output.content or ""
-
-
-    async def _process_results -> nx.Graph
-        graph = nx.Graph() 
-
-
-###  summarize descriptions
-
-# graphrag/index/operations/summarize_descriptions/summarize_descriptions
-async with semaphore:
-    results = await strategy_exec(
-        id, descriptions, callbacks, cache, strategy_config
+    output = await self._process_results(
+        all_records,
+        prompt_variables.get(self._tuple_delimiter_key, DEFAULT_TUPLE_DELIMITER),
+        prompt_variables.get(self._record_delimiter_key, DEFAULT_RECORD_DELIMITER),
     )
-    ticker(1)
+    return GraphExtractionResult(
+        output=output,
+        source_docs=source_doc_map,
+    )
 
-# finalize graph
-# graphrag/index/workflows/finalize_graph
-final_entities, final_relationships = finalize_graph(
-    entities,
-    relationships,
-    callbacks=context.callbacks,
-    embed_config=config.embed_graph,
-    layout_enabled=config.umap.enabled,
-)
+    async def _process_document(
+        self, text: str, prompt_variables: dict[str, str]
+    ) -> str:
+       
+        response = await self._model.achat(
+            prompt, history=[]
+        )
+        results = response.output.content or ""
+        history = [
+            {'role': 'user', 'content': prompt},
+            {'role': 'assistant', 'content': response.output.content or ""}
+        ]  
 
+        if self._max_gleanings > 0:  # 补充抽取次数
+            for i in range(self._max_gleanings):
+                response = await self._model.achat(
+                    CONTINUE_PROMPT,
+                    name=f"extract-continuation-{i}",
+                    history=history,
+                )
+                results += response.output.content or ""
+                history.append({'role': 'user', 'content': CONTINUE_PROMPT})
+                history.append({'role': 'assistant', 'content': response.output.content or ""})
+
+                if i >= self._max_gleanings - 1:
+                    break
+
+                response = await self._model.achat(
+                    LOOP_PROMPT,
+                    name=f"extract-loopcheck-{i}",
+                    history=history,  
+                )  # 判断是否继续进行抽取
+                history.append({'role': 'user', 'content': LOOP_PROMPT})
+                history.append({'role': 'assistant', 'content': response.output.content or ""})
+                if response.output.content != "Y":
+                    break
+
+        return results
+    
+    async def _process_results() -> nx.Graph:
+        graph = nx.Graph()
+
+        graph.add_node(
+            entity_name,
+            type=entity_type,
+            description=entity_description,
+            source_id=str(source_doc_id),
+        )
+
+        graph.add_edge(
+            source,
+            target,
+            weight=weight,
+            description=edge_description,
+            source_id=edge_source_id,
+        ) 
 ```
 
-实体关系补充抽取流程
+## SummarizeExtractor
 ```python
-async def _process_document(
-    self, text: str, prompt_variables: dict[str, str]
-) -> str:
-    response = await self._model.achat(
-        self._extraction_prompt.format(**{
-            **prompt_variables,
-            self._input_text_key: text,
-        }),
-    )
-    results = response.output.content or ""
 
-    # if gleanings are specified, enter a loop to extract more entities
-    # there are two exit criteria: (a) we hit the configured max, (b) the model says there are no more entities
-    if self._max_gleanings > 0:  # 补充抽取次数
-        for i in range(self._max_gleanings):
-            response = await self._model.achat(
-                CONTINUE_PROMPT,
-                name=f"extract-continuation-{i}",
-                history=response.history,
-            )
-            results += response.output.content or ""
 
-            # if this is the final glean, don't bother updating the continuation flag
-            if i >= self._max_gleanings - 1:
-                break
-
-            response = await self._model.achat(
-                LOOP_PROMPT,
-                name=f"extract-loopcheck-{i}",
-                history=response.history,
-            )
-            if response.output.content != "Y":
-                break
-
-    return results
 ```
-这段代码是 GraphExtractor 类中的一个异步方法 _process_document，用于处理单个文档文本，向大语言模型（LLM）发送抽取实体和关系的请求，并根据配置多次补充抽取（gleanings）。
-
-具体流程如下：
-
-首先，使用 self._extraction_prompt 和 prompt_variables 以及当前 text 组装提示词，调用模型的 achat 方法，得到初步抽取结果。
-如果配置了 max_gleanings（补充抽取次数），则进入循环，每次用 CONTINUE_PROMPT 让模型继续抽取更多实体/关系，并将新结果追加到 results。
-每次补充抽取后，如果不是最后一次，还会用 LOOP_PROMPT 询问模型是否还有更多实体可抽取。如果模型回复不是 "Y"，则提前退出循环。
-最终返回所有抽取结果字符串。
-简而言之，这段代码实现了“多轮补充抽取”，直到达到最大次数或模型认为没有更多实体可抽取为止。
  
 
 
-
+# 其他
 ```bash
 # 打包
 tar -zcvf ragtest.tar.gz ragtest 
@@ -531,4 +529,3 @@ class Cache(ABC):
 # 但在之前的实体抽取流程中，从 cache 读取 response 后，并没有像直接调用 LLM 那样将结果注入到 history 中。
 # 这会导致后续补充抽取（多轮抽取）时，无法利用历史对话（history）继续补充实体，影响抽取的完整性。
 ```
-

@@ -61,7 +61,7 @@ def _compute_leiden_communities(
     seed: int | None = None,
 ) -> tuple[dict[int, dict[str, int]], dict[int, int]]:
     """Return Leiden root communities and their hierarchy mapping."""
-    if use_lcc:
+    if use_lcc:  # 只对最大连通子图做社会划分，避免孤立节点影响划分效果
         graph = stable_largest_connected_component(graph)
 
     community_mapping = hierarchical_leiden(
@@ -71,10 +71,12 @@ def _compute_leiden_communities(
     hierarchy: dict[int, int] = {}
     for partition in community_mapping:
         results[partition.level] = results.get(partition.level, {})
+        # 记录该节点在该层属于哪个社区
         results[partition.level][partition.node] = partition.cluster
-
+        # 记录该社区的父社区id（顶层社区父id为-1）
         hierarchy[partition.cluster] = (
             partition.parent_cluster if partition.parent_cluster is not None else -1
         )
-
+    # results 每层每节点所属社区
+    # hierarchy 每个社区的父社区
     return results, hierarchy

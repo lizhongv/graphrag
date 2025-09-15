@@ -142,7 +142,8 @@ class GraphExtractor:
             all_records,
             prompt_variables.get(self._tuple_delimiter_key, DEFAULT_TUPLE_DELIMITER),
             prompt_variables.get(self._record_delimiter_key, DEFAULT_RECORD_DELIMITER),
-        )
+            prompt_variables.get(self._completion_delimiter_key, DEFAULT_COMPLETION_DELIMITER),
+        ) # TODO 修改增加DEFAULT_COMPLETION_DELIMITER
 
         return GraphExtractionResult(
             output=output,
@@ -196,11 +197,124 @@ class GraphExtractor:
 
         return results
 
+    # async def _process_results(
+    #     self,
+    #     results: dict[int, str],
+    #     tuple_delimiter: str,
+    #     record_delimiter: str,
+    # ) -> nx.Graph:
+    #     """Parse the result string to create an undirected unipartite graph.
+
+    #     Args:
+    #         - results - dict of results from the extraction chain
+    #         - tuple_delimiter - delimiter between tuples in an output record, default is '<|>'
+    #         - record_delimiter - delimiter between records, default is '##'
+    #     Returns:
+    #         - output - unipartite graph in graphML format
+    #     """
+    #     graph = nx.Graph()
+    #     for source_doc_id, extracted_data in results.items():
+    #         records = [r.strip() for r in extracted_data.split(record_delimiter)]
+    #         # TODO ? <|COMPLETE|> 没有去掉
+    #         for record in records:
+    #             record = re.sub(r"^\(|\)$", "", record.strip())
+    #             record_attributes = record.split(tuple_delimiter)
+
+    #             if record_attributes[0] == '"entity"' and len(record_attributes) >= 4:
+    #                 # add this record as a node in the G
+    #                 entity_name = clean_str(record_attributes[1].upper())
+    #                 entity_type = clean_str(record_attributes[2].upper())
+    #                 entity_description = clean_str(record_attributes[3])
+
+    #                 if entity_name in graph.nodes():
+    #                     node = graph.nodes[entity_name]
+    #                     if self._join_descriptions:
+    #                         node["description"] = "\n".join(
+    #                             list({
+    #                                 *_unpack_descriptions(node),
+    #                                 entity_description,
+    #                             })
+    #                         )
+    #                     else:
+    #                         if len(entity_description) > len(node["description"]):
+    #                             node["description"] = entity_description
+    #                     node["source_id"] = ", ".join(
+    #                         list({
+    #                             *_unpack_source_ids(node),
+    #                             str(source_doc_id),
+    #                         })
+    #                     )
+    #                     node["type"] = (
+    #                         entity_type if entity_type != "" else node["type"]
+    #                     )
+    #                 else:  # 添加新节点 
+    #                     graph.add_node(
+    #                         entity_name,
+    #                         type=entity_type,
+    #                         description=entity_description,
+    #                         source_id=str(source_doc_id),
+    #                     )
+
+    #             if (
+    #                 record_attributes[0] == '"relationship"'
+    #                 and len(record_attributes) >= 5
+    #             ):
+    #                 # add this record as edge
+    #                 source = clean_str(record_attributes[1].upper())
+    #                 target = clean_str(record_attributes[2].upper())
+    #                 edge_description = clean_str(record_attributes[3])
+    #                 edge_source_id = clean_str(str(source_doc_id))
+    #                 try:
+    #                     weight = float(record_attributes[-1])
+    #                 except ValueError:
+    #                     weight = 1.0
+
+    #                 if source not in graph.nodes():
+    #                     graph.add_node(
+    #                         source,
+    #                         type="",
+    #                         description="",
+    #                         source_id=edge_source_id,
+    #                     )
+    #                 if target not in graph.nodes():
+    #                     graph.add_node(
+    #                         target,
+    #                         type="",
+    #                         description="",
+    #                         source_id=edge_source_id,
+    #                     )
+    #                 if graph.has_edge(source, target):
+    #                     edge_data = graph.get_edge_data(source, target)
+    #                     if edge_data is not None:
+    #                         weight += edge_data["weight"]
+    #                         if self._join_descriptions:
+    #                             edge_description = "\n".join(
+    #                                 list({
+    #                                     *_unpack_descriptions(edge_data),
+    #                                     edge_description,
+    #                                 })
+    #                             )
+    #                         edge_source_id = ", ".join(
+    #                             list({
+    #                                 *_unpack_source_ids(edge_data),
+    #                                 str(source_doc_id),
+    #                             })
+    #                         )
+    #                 graph.add_edge(
+    #                     source,
+    #                     target,
+    #                     weight=weight,
+    #                     description=edge_description,
+    #                     source_id=edge_source_id,
+    #                 )
+
+    #     return graph
     async def _process_results(
         self,
         results: dict[int, str],
         tuple_delimiter: str,
         record_delimiter: str,
+        completion_delimiter: str,
     ) -> nx.Graph:
         """Parse the result string to create an undirected unipartite graph.
 
@@ -208,104 +322,107 @@ class GraphExtractor:
             - results - dict of results from the extraction chain
             - tuple_delimiter - delimiter between tuples in an output record, default is '<|>'
             - record_delimiter - delimiter between records, default is '##'
+            - completion_delimiter - delimiter indicating completion of output, default is '<|COMPLETE|>'
         Returns:
             - output - unipartite graph in graphML format
         """
         graph = nx.Graph()
         for source_doc_id, extracted_data in results.items():
-            records = [r.strip() for r in extracted_data.split(record_delimiter)]
-            # TODO ? <|COMPLETE|> 没有去掉
-            for record in records:
-                record = re.sub(r"^\(|\)$", "", record.strip())
-                record_attributes = record.split(tuple_delimiter)
+            # 先按 completion_delimiter 分割为多个块
+            complete_blocks = [b for b in extracted_data.split(completion_delimiter) if b.strip()]
+            for block in complete_blocks:
+                records = [r.strip() for r in block.split(record_delimiter)]
+                for record in records:
+                    record = re.sub(r"^\(|\)$", "", record.strip())
+                    record_attributes = record.split(tuple_delimiter)
 
-                if record_attributes[0] == '"entity"' and len(record_attributes) >= 4:
-                    # add this record as a node in the G
-                    entity_name = clean_str(record_attributes[1].upper())
-                    entity_type = clean_str(record_attributes[2].upper())
-                    entity_description = clean_str(record_attributes[3])
+                    if record_attributes[0] == '"entity"' and len(record_attributes) >= 4:
+                        # add this record as a node in the G
+                        entity_name = clean_str(record_attributes[1].upper())
+                        entity_type = clean_str(record_attributes[2].upper())
+                        entity_description = clean_str(record_attributes[3])
 
-                    if entity_name in graph.nodes():
-                        node = graph.nodes[entity_name]
-                        if self._join_descriptions:
-                            node["description"] = "\n".join(
-                                list({
-                                    *_unpack_descriptions(node),
-                                    entity_description,
-                                })
-                            )
-                        else:
-                            if len(entity_description) > len(node["description"]):
-                                node["description"] = entity_description
-                        node["source_id"] = ", ".join(
-                            list({
-                                *_unpack_source_ids(node),
-                                str(source_doc_id),
-                            })
-                        )
-                        node["type"] = (
-                            entity_type if entity_type != "" else node["type"]
-                        )
-                    else:  # 添加新节点 
-                        graph.add_node(
-                            entity_name,
-                            type=entity_type,
-                            description=entity_description,
-                            source_id=str(source_doc_id),
-                        )
-
-                if (
-                    record_attributes[0] == '"relationship"'
-                    and len(record_attributes) >= 5
-                ):
-                    # add this record as edge
-                    source = clean_str(record_attributes[1].upper())
-                    target = clean_str(record_attributes[2].upper())
-                    edge_description = clean_str(record_attributes[3])
-                    edge_source_id = clean_str(str(source_doc_id))
-                    try:
-                        weight = float(record_attributes[-1])
-                    except ValueError:
-                        weight = 1.0
-
-                    if source not in graph.nodes():
-                        graph.add_node(
-                            source,
-                            type="",
-                            description="",
-                            source_id=edge_source_id,
-                        )
-                    if target not in graph.nodes():
-                        graph.add_node(
-                            target,
-                            type="",
-                            description="",
-                            source_id=edge_source_id,
-                        )
-                    if graph.has_edge(source, target):
-                        edge_data = graph.get_edge_data(source, target)
-                        if edge_data is not None:
-                            weight += edge_data["weight"]
+                        if entity_name in graph.nodes():
+                            node = graph.nodes[entity_name]
                             if self._join_descriptions:
-                                edge_description = "\n".join(
+                                node["description"] = "\n".join(
                                     list({
-                                        *_unpack_descriptions(edge_data),
-                                        edge_description,
+                                        *_unpack_descriptions(node),
+                                        entity_description,
                                     })
-                                )
-                            edge_source_id = ", ".join(
+                                )  # 合并描述 
+                            else: # 取更长的描述
+                                if len(entity_description) > len(node["description"]):
+                                    node["description"] = entity_description 
+                            node["source_id"] = ", ".join(
                                 list({
-                                    *_unpack_source_ids(edge_data),
+                                    *_unpack_source_ids(node),
                                     str(source_doc_id),
                                 })
+                            ) # 合并来源
+                            node["type"] = (
+                                entity_type if entity_type != "" else node["type"]
+                            ) # 更新类型
+                        else:  # 添加新节点 
+                            graph.add_node(
+                                entity_name,
+                                type=entity_type,
+                                description=entity_description,
+                                source_id=str(source_doc_id),
                             )
-                    graph.add_edge(
-                        source,
-                        target,
-                        weight=weight,
-                        description=edge_description,
-                        source_id=edge_source_id,
-                    )
+
+                    if (
+                        record_attributes[0] == '"relationship"'
+                        and len(record_attributes) >= 5
+                    ):
+                        # add this record as edge
+                        source = clean_str(record_attributes[1].upper())
+                        target = clean_str(record_attributes[2].upper())
+                        edge_description = clean_str(record_attributes[3])
+                        edge_source_id = clean_str(str(source_doc_id))
+                        try:
+                            weight = float(record_attributes[-1])
+                        except ValueError:
+                            weight = 1.0
+
+                        if source not in graph.nodes():
+                            graph.add_node(
+                                source,
+                                type="",
+                                description="",
+                                source_id=edge_source_id,
+                            )
+                        if target not in graph.nodes():
+                            graph.add_node(
+                                target,
+                                type="",
+                                description="",
+                                source_id=edge_source_id,
+                            )
+                        if graph.has_edge(source, target):
+                            edge_data = graph.get_edge_data(source, target)
+                            if edge_data is not None:
+                                weight += edge_data["weight"]
+                                if self._join_descriptions:
+                                    edge_description = "\n".join(
+                                        list({
+                                            *_unpack_descriptions(edge_data),
+                                            edge_description,
+                                        })
+                                    ) # 合并描述
+                                edge_source_id = ", ".join(
+                                    list({
+                                        *_unpack_source_ids(edge_data),
+                                        str(source_doc_id),
+                                    }) # 合并来源
+                                )
+                        graph.add_edge(
+                            source,
+                            target,
+                            weight=weight,
+                            description=edge_description,
+                            source_id=edge_source_id,
+                        ) # 添加/更新边
 
         return graph
 

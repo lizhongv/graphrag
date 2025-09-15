@@ -119,14 +119,15 @@ class SummarizeExtractor:
         self, id: str | tuple[str, str] | list[str], descriptions: list[str]
     ):
         """Summarize descriptions using the LLM."""
+        prompt = self._summarization_prompt.format(**{
+            ENTITY_NAME_KEY: json.dumps(id, ensure_ascii=False),
+            DESCRIPTION_LIST_KEY: json.dumps(
+                sorted(descriptions), ensure_ascii=False
+            ),
+            MAX_LENGTH_KEY: self._max_summary_length,
+        })
         response = await self._model.achat(
-            self._summarization_prompt.format(**{
-                ENTITY_NAME_KEY: json.dumps(id, ensure_ascii=False),
-                DESCRIPTION_LIST_KEY: json.dumps(
-                    sorted(descriptions), ensure_ascii=False
-                ),
-                MAX_LENGTH_KEY: self._max_summary_length,
-            }),
+            prompt,
             name="summarize",
         )
         # Calculate result

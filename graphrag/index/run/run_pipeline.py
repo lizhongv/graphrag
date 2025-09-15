@@ -108,7 +108,7 @@ async def _run_pipeline(
             progress = logger.child(name, transient=False)
             context.callbacks.workflow_start(name, None)
             work_time = time.time()
-            # TODO core code 
+            # TODO 核心代码
             result = await workflow_function(config, context) 
             progress(Progress(percent=1))
             context.callbacks.workflow_end(name, result)
