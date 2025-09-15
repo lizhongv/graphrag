@@ -153,13 +153,17 @@ class GraphExtractor:
         self, text: str, prompt_variables: dict[str, str]
     ) -> str:
         # TODO why response.history is null [] ???
+        prompt = self._extraction_prompt.format(
+            **{self._input_text_key: text, **prompt_variables}
+        )
         response = await self._model.achat(
-            self._extraction_prompt.format(**{
-                **prompt_variables,
-                self._input_text_key: text,
-            }),
+            prompt, history=[]
         )
         results = response.output.content or ""
+        history = [
+            {'role': 'user', 'content': prompt},
+            {'role': 'assistant', 'content': response.output.content or ""}
+        ]  # TODO 修改历史记录的方式
 
         # if gleanings are specified, enter a loop to extract more entities
         # there are two exit criteria: (a) we hit the configured max, (b) the model says there are no more entities
@@ -168,9 +172,12 @@ class GraphExtractor:
                 response = await self._model.achat(
                     CONTINUE_PROMPT,
                     name=f"extract-continuation-{i}",
-                    history=response.history,  # TODO 这个历史为何会丢失，为空列表
+                    # history=response.history,  # TODO 这个历史为何会丢失，为空列表
+                    history=history,
                 )
                 results += response.output.content or ""
+                history.append({'role': 'user', 'content': CONTINUE_PROMPT})
+                history.append({'role': 'assistant', 'content': response.output.content or ""})
 
                 # if this is the final glean, don't bother updating the continuation flag
                 if i >= self._max_gleanings - 1:
@@ -179,8 +186,11 @@ class GraphExtractor:
                 response = await self._model.achat(
                     LOOP_PROMPT,
                     name=f"extract-loopcheck-{i}",
-                    history=response.history,
+                    # history=response.history,
+                    history=history,  # TODO 修改历史记录的方式
                 )
+                history.append({'role': 'user', 'content': LOOP_PROMPT})
+                history.append({'role': 'assistant', 'content': response.output.content or ""})
                 if response.output.content != "Y":
                     break
 

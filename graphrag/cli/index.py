@@ -80,6 +80,7 @@ def index_cli(
         cli_overrides["reporting.base_dir"] = str(output_dir)
         cli_overrides["update_index_output.base_dir"] = str(output_dir)
     
+    # loading settings.yaml → GraphRagConfig
     config = load_config(root_dir, config_filepath, cli_overrides)
     
     _run_index(
@@ -155,7 +156,7 @@ def _run_index(
         )
 
     if not skip_validation:
-        validate_config_names(progress_logger, config)  # TODO time-consuming
+        validate_config_names(progress_logger, config)  # TODO time-consuming, calling llm to response 
 
     info(f"Starting pipeline run. {dry_run=}", verbose)
     info(

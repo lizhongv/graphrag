@@ -1,4 +1,7 @@
 
+目前使用的 2.3.0 版本
+
+
 1. 利用LLM从知识库中提取实体以及实体关系;
 2. 利用LLM对实体联系进行聚类，生成社区摘要；
 3. 在回答用户问题时利用LLM结合社区摘进行回答。
@@ -256,7 +259,6 @@ workflow_callbacks.pipeline_end(outputs)
 
 ### 3. run pipeline 
 # graphrag/index/run/run_pipeline.run_pipeline 
-graphrag/index/run/run_pipeline._run_pipeline
 async for table in _run_pipeline(
     pipeline=pipeline,
     config=config,
@@ -296,6 +298,7 @@ output = create_base_text_units(
     prepend_metadata=chunks.prepend_metadata,
     chunk_size_includes_metadata=chunks.chunk_size_includes_metadata,
 )
+# id，采用gen_sha512_hash对chunk生成id 
 
 ###  (3)  create_final_documents 
 # graphrag/index/workflows/create_final_documents
@@ -316,6 +319,7 @@ entities, relationships, raw_entities, raw_relationships = await extract_graph(
     summarization_num_threads=summarization_llm_settings.concurrent_requests,
 )
 ...
+
 extracted_entities, extracted_relationships = await extractor(
     text_units=text_units,
     callbacks=callbacks,
@@ -328,6 +332,7 @@ extracted_entities, extracted_relationships = await extractor(
     num_threads=extraction_num_threads,
 )
 ...
+
 # graphrag/index/operations/extract_graph/extract_graph
 async def extract_graph -> tuple[pd.DataFrame, pd.DataFrame]:
     ...
@@ -489,3 +494,41 @@ tar -zxvf ragtest.tar.gz
 ## bug 注意
 
 当运行相同数据时，由于没有清楚缓存cache，很可能导致llm回复不带history，后续需要详细分析代码。
+
+## cache 
+
+```python
+# llm cache 
+# fnllm/openai/services/openai_text_chat_cache_adapter
+
+class OpenAITextChatCacheAdapter:
+    ...
+    def build_cache_key(
+        self, prompt: OpenAIChatCompletionInput, kwargs: LLMInput[Any, Any, Any]
+    ) -> str:
+        """Build a cache key from the prompt and kwargs."""
+        name = kwargs.get("name")
+        return self._cache.create_key(
+            self.get_cache_input_data(prompt, kwargs),
+            prefix=f"chat_{name}" if name else "chat",
+        )
+    ...
+
+# fnllm/caching/base
+class Cache(ABC):
+    ... 
+    def create_key(self, data: Any, *, prefix: str | None = None) -> str:
+        """Create a custom key by hashing the data. Returns `{data_hash}_v{strategy_version}` or `{prefix}_{data_hash}_v{strategy_version}`."""
+        data_hash = _hash(json.dumps(data, sort_keys=True))
+
+        if prefix is not None:
+            return f"{prefix}_{data_hash}_v{self.__cache_strategy_version__}"
+
+        return f"{data_hash}_v{self.__cache_strategy_version__}"
+    ...
+
+# 先从 cache 中查找，如果存在则直接返回结果，不调用 LLM。
+# 但在之前的实体抽取流程中，从 cache 读取 response 后，并没有像直接调用 LLM 那样将结果注入到 history 中。
+# 这会导致后续补充抽取（多轮抽取）时，无法利用历史对话（history）继续补充实体，影响抽取的完整性。
+```
+

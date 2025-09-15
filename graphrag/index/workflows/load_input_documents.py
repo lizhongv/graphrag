@@ -33,7 +33,7 @@ async def run_workflow(
     log.info("Final # of rows loaded: %s", len(output))
     context.stats.num_documents = len(output)
 
-    await write_table_to_storage(output, "documents", context.output_storage)
+    await write_table_to_storage(output, "documents", context.output_storage)  # 不管之前是否保存，都重写
 
     return WorkflowFunctionOutput(result=output)
 
